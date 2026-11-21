@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Orders & Billing | Restaurant DBMS{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header & Action -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-receipt text-amber-600"></i>
+                <span>Orders, Kitchen & Billing Management</span>
+            </h1>
+            <p class="text-stone-500 text-sm">Managing orders, table service, billing recalculations via triggers, and payment settlements.</p>
+        </div>
+        <button onclick="openCreateOrderModal()" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-sm shadow-sm transition flex items-center space-x-2 self-start sm:self-auto">
+            <i class="fa-solid fa-cart-plus"></i>
+            <span>Place New Order</span>
+        </button>
+    </div>
+
+    <!-- Live SQL Query Viewer Card -->
+    <div class="bg-stone-900 text-stone-200 rounded-xl p-4 text-xs font-mono shadow-inner border border-stone-800">
+        <div class="flex items-center justify-between text-stone-400 mb-1.5 pb-1 border-b border-stone-800">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-code text-amber-400"></i>
+                <span class="font-semibold text-stone-300">Underlying SQL Query Executed:</span>
+            </div>
+            <span class="text-[10px] bg-stone-800 px-2 py-0.5 rounded text-amber-300 border border-stone-700">Multi-Table JOIN & Aggregates</span>
+        </div>
+        <pre class="overflow-x-auto text-emerald-400 whitespace-pre-wrap">{{ sql_used }}</pre>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+        <form method="GET" action="{{ url_for('orders') }}" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Filter by Status</label>
+                <select name="status" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+                    <option value="">All Statuses</option>
+                    <option value="Pending" {% if status_filter == 'Pending' %}selected{% endif %}>Pending</option>
+                    <option value="In Kitchen" {% if status_filter == 'In Kitchen' %}selected{% endif %}>In Kitchen</option>
+                    <option value="Served" {% if status_filter == 'Served' %}selected{% endif %}>Served</option>
+                    <option value="Completed" {% if status_filter == 'Completed' %}selected{% endif %}>Completed</option>
+                    <option value="Cancelled" {% if status_filter == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Order Type</label>
+                <select name="type" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+                    <option value="">All Types</option>
+                    <option value="Dine-in" {% if type_filter == 'Dine-in' %}selected{% endif %}>Dine-in</option>
+                    <option value="Takeaway" {% if type_filter == 'Takeaway' %}selected{% endif %}>Takeaway</option>
+                    <option value="Delivery" {% if type_filter == 'Delivery' %}selected{% endif %}>Delivery</option>
+                </select>
+            </div>
+
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="flex-1 px-4 py-2 bg-stone-800 hover:bg-stone-900 text-white text-sm font-medium rounded-lg transition flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-filter text-xs"></i>
+                    <span>Apply Filter</span>
+                </button>
+                <a href="{{ url_for('orders') }}" class="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm rounded-lg transition" title="Clear Filters">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+            <span class="text-sm font-semibold text-stone-700">Total Orders: <span class="text-amber-600 font-bold">{{ orders|length }}</span></span>
+            <span class="text-xs text-stone-400">Junction: <code class="text-amber-600">orders (1) ── (N) order_items (N) ── (1) menu_items</code></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="bg-stone-50 text-xs font-semibold text-stone-500 uppercase border-b border-stone-200">
+                        <th class="py-3 px-4">Order #</th>
+                        <th class="py-3 px-4">Type / Table</th>
+                        <th class="py-3 px-4">Customer</th>
+                        <th class="py-3 px-4">Server</th>
+                        <th class="py-3 px-4 text-center">Items</th>
+                        <th class="py-3 px-4 text-center">Status</th>
+                        <th class="py-3 px-4 text-center">Payment</th>
+                        <th class="py-3 px-4 text-right">Bill Total</th>
+                        <th class="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    {% for o in orders %}
+                    <tr class="hover:bg-stone-50 transition">
+                        <td class="py-3.5 px-4 font-mono font-bold text-amber-600">{{ o.order_number }}</td>
+                        <td class="py-3.5 px-4">
+                            <span class="px-2 py-0.5 rounded text-xs font-semibold font-mono
+                                {% if o.order_type == 'Dine-in' %}bg-blue-50 text-blue-700
+                                {% elif o.order_type == 'Takeaway' %}bg-amber-50 text-amber-700
+                                {% else %}bg-purple-50 text-purple-700{% endif %}">
+                                {{ o.order_type }}
+                            </span>
+                            {% if o.table_number %}
+                                <div class="text-xs font-bold text-stone-700 mt-1">Table: {{ o.table_number }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <div class="font-medium text-stone-900 text-xs">{{ o.customer_name }}</div>
+                            <div class="text-[11px] text-stone-400 font-mono">{{ o.customer_phone or 'Walk-in' }}</div>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs text-stone-700 font-medium">
+                            {{ o.waiter_name }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="px-2 py-0.5 bg-stone-100 text-stone-700 rounded-full text-xs font-semibold font-mono">{{ o.items_count }} items</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                                {% if o.order_status == 'Completed' %}bg-emerald-100 text-emerald-800
+                                {% elif o.order_status == 'In Kitchen' %}bg-amber-100 text-amber-800
+                                {% elif o.order_status == 'Served' %}bg-blue-100 text-blue-800
+                                {% elif o.order_status == 'Pending' %}bg-purple-100 text-purple-800
+                                {% else %}bg-rose-100 text-rose-800{% endif %}">
+                                {{ o.order_status }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="px-2 py-0.5 rounded text-xs font-semibold
+                                {% if o.payment_status == 'Paid' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                                {% else %}bg-rose-50 text-rose-700 border border-rose-200{% endif %}">
+                                {{ o.payment_status }} ({{ o.payment_method }})
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-right font-mono font-bold text-stone-900 text-sm">
+                            ₹{{ "{:,.2f}".format(o.total_amount) }}
+                        </td>
+                        <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                            <!-- View / Bill / Add Items Button -->
+                            <button onclick='openOrderBillModal({{ o|tojson|safe }}, {{ order_items_map[o.order_id]|tojson|safe }})' class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded text-xs font-semibold transition" title="View Bill & Add Dishes">
+                                <i class="fa-solid fa-file-invoice mr-1"></i> Bill / Items
+                            </button>
+                            <!-- Delete Form -->
+                            <form action="{{ url_for('delete_order', order_id=o.order_id) }}" method="POST" class="inline" onsubmit="return confirm('Delete order {{ o.order_number }}?\n\nCASCADE will remove all line items.');">
+                                <button type="submit" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded transition" title="Delete Order">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Create New Order -->
+<div id="createOrderModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
+        <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+            <h3 class="text-lg font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-cart-plus text-amber-600"></i>
+                <span>Open New Dining Order (INSERT)</span>
+            </h3>
+            <button onclick="closeCreateOrderModal()" class="text-stone-400 hover:text-stone-600">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form action="{{ url_for('create_order') }}" method="POST" class="mt-4 space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Order Type *</label>
+                    <select name="order_type" id="new_order_type" onchange="toggleTableSelect(this.value)" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="Dine-in">Dine-in</option>
+                        <option value="Takeaway">Takeaway</option>
+                        <option value="Delivery">Delivery</option>
+                    </select>
+                </div>
+                <div id="tableSelectContainer">
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Dining Table (Trigger: Auto-Occupied)</label>
+                    <select name="table_id" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="">-- Select Table --</option>
+                        {% for t in dropdowns.tables %}
+                            <option value="{{ t.table_id }}">{{ t.table_number }} ({{ t.seating_capacity }} seats - {{ t.status }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Customer (Optional)</label>
+                    <select name="customer_id" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="">Walk-in Guest</option>
+                        {% for c in dropdowns.customers %}
+                            <option value="{{ c.customer_id }}">{{ c.name }} ({{ c.phone }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Assigned Server / Waiter</label>
+                    <select name="staff_id" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="">-- Select Waiter --</option>
+                        {% for w in dropdowns.waiters %}
+                            <option value="{{ w.staff_id }}">{{ w.name }} ({{ w.role }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800">
+                <i class="fa-solid fa-bolt text-amber-600 mr-1"></i>
+                For Dine-in orders, <code class="font-bold">trg_after_order_insert_occupy_table</code> will set the selected table's status to <strong>Occupied</strong> automatically.
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 flex justify-end space-x-3">
+                <button type="button" onclick="closeCreateOrderModal()" class="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow-sm">Open Order</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Order Bill & Add Line Items -->
+<div id="orderBillModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+            <div>
+                <h3 class="text-lg font-bold text-stone-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-receipt text-amber-600"></i>
+                    <span id="billOrderTitle">Order Bill & Items</span>
+                </h3>
+                <p id="billOrderSubtitle" class="text-xs text-stone-500 mt-1"></p>
+            </div>
+            <button onclick="closeOrderBillModal()" class="text-stone-400 hover:text-stone-600">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Existing Items Table -->
+        <div class="mt-4">
+            <h4 class="text-xs font-bold text-stone-700 uppercase mb-2">Ordered Dishes (order_items)</h4>
+            <div id="billItemsContainer" class="border border-stone-200 rounded-lg overflow-hidden">
+                <!-- Dynamically filled by JS -->
+            </div>
+            <div class="flex justify-between items-center px-4 py-3 bg-stone-50 border-t border-stone-200 mt-2 rounded-lg font-mono font-bold text-sm">
+                <span>Grand Total (Calculated via Trigger):</span>
+                <span id="billGrandTotal" class="text-amber-700 text-base">₹0.00</span>
+            </div>
+        </div>
+
+        <!-- Add Dish to this Order Form -->
+        <div class="mt-6 p-4 bg-stone-50 rounded-xl border border-stone-200">
+            <h4 class="text-xs font-bold text-stone-800 uppercase mb-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-plus-circle text-amber-600"></i>
+                <span>Add Dish to This Order (Fires Recalculation Trigger)</span>
+            </h4>
+            <form id="addItemForm" method="POST" class="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+                <div class="sm:col-span-5">
+                    <select name="item_id" required class="w-full px-2.5 py-1.5 border border-stone-300 rounded focus:ring-2 focus:ring-amber-500">
+                        <option value="">-- Select Dish --</option>
+                        {% for i in dropdowns.menu_items %}
+                            <option value="{{ i.item_id }}">{{ i.item_name }} (₹{{ i.price }} - {{ i.food_type }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="sm:col-span-2">
+                    <input type="number" name="quantity" value="1" min="1" max="20" required class="w-full px-2.5 py-1.5 border border-stone-300 rounded font-mono" placeholder="Qty">
+                </div>
+                <div class="sm:col-span-3">
+                    <input type="text" name="special_instructions" placeholder="Note (e.g. spicy)" class="w-full px-2.5 py-1.5 border border-stone-300 rounded">
+                </div>
+                <div class="sm:col-span-2">
+                    <button type="submit" class="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded transition">Add Item</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Settle Bill & Status Update Form -->
+        <div class="mt-4 p-4 bg-emerald-50/60 rounded-xl border border-emerald-200">
+            <h4 class="text-xs font-bold text-emerald-900 uppercase mb-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-check-double text-emerald-600"></i>
+                <span>Update Order Status & Settle Bill</span>
+            </h4>
+            <form id="updateStatusForm" method="POST" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-stone-700 mb-1">Order Status</label>
+                    <select name="order_status" id="bill_order_status" class="w-full px-2.5 py-1.5 border border-stone-300 rounded font-medium">
+                        <option value="Pending">Pending</option>
+                        <option value="In Kitchen">In Kitchen</option>
+                        <option value="Served">Served</option>
+                        <option value="Completed">Completed (Frees Table)</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-stone-700 mb-1">Payment Status</label>
+                    <select name="payment_status" id="bill_payment_status" class="w-full px-2.5 py-1.5 border border-stone-300 rounded font-medium">
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Refunded">Refunded</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-stone-700 mb-1">Payment Method</label>
+                    <select name="payment_method" id="bill_payment_method" class="w-full px-2.5 py-1.5 border border-stone-300 rounded font-medium">
+                        <option value="Pending">Pending</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Card">Card</option>
+                        <option value="UPI">UPI</option>
+                    </select>
+                </div>
+
+                <div class="sm:col-span-3 flex justify-end pt-2">
+                    <button type="submit" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-lg shadow-sm transition">
+                        Update Status & Fire Settlement Triggers
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleTableSelect(orderType) {
+    const container = document.getElementById('tableSelectContainer');
+    if (orderType === 'Dine-in') {
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+function openCreateOrderModal() {
+    const modal = document.getElementById('createOrderModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeCreateOrderModal() {
+    const modal = document.getElementById('createOrderModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function openOrderBillModal(o, items) {
+    document.getElementById('billOrderTitle').innerText = o.order_number + ' - Bill & Line Items';
+    document.getElementById('billOrderSubtitle').innerText = o.customer_name + ' • ' + o.order_type + (o.table_number ? ' (Table: ' + o.table_number + ')' : '') + ' • Waiter: ' + o.waiter_name;
+    document.getElementById('billGrandTotal').innerText = '₹' + parseFloat(o.total_amount).toFixed(2);
+
+    document.getElementById('addItemForm').action = '/orders/add-item/' + o.order_id;
+    document.getElementById('updateStatusForm').action = '/orders/update-status/' + o.order_id;
+
+    document.getElementById('bill_order_status').value = o.order_status;
+    document.getElementById('bill_payment_status').value = o.payment_status;
+    document.getElementById('bill_payment_method').value = o.payment_method;
+
+    const container = document.getElementById('billItemsContainer');
+    if (!items || items.length === 0) {
+        container.innerHTML = '<div class="p-4 text-center text-xs text-stone-400">No dishes added to this order yet. Add a dish below!</div>';
+    } else {
+        let html = `
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="bg-stone-100 text-stone-600 font-semibold border-b border-stone-200">
+                        <th class="py-2 px-3">Item</th>
+                        <th class="py-2 px-3 text-center">Qty</th>
+                        <th class="py-2 px-3 text-right">Price</th>
+                        <th class="py-2 px-3 text-right">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    ${items.map(it => `
+                        <tr>
+                            <td class="py-2 px-3">
+                                <span class="font-semibold text-stone-800">${it.item_name}</span>
+                                ${it.special_instructions ? `<div class="text-[10px] text-stone-400 italic">Note: ${it.special_instructions}</div>` : ''}
+                            </td>
+                            <td class="py-2 px-3 text-center font-mono font-bold">${it.quantity}</td>
+                            <td class="py-2 px-3 text-right font-mono">₹${parseFloat(it.unit_price).toFixed(2)}</td>
+                            <td class="py-2 px-3 text-right font-mono font-bold text-stone-800">₹${parseFloat(it.subtotal).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        container.innerHTML = html;
+    }
+
+    const modal = document.getElementById('orderBillModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeOrderBillModal() {
+    const modal = document.getElementById('orderBillModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+</script>
+{% endblock %}

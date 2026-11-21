@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Restaurant Staff | Restaurant DBMS{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header & Action -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-user-tie text-amber-600"></i>
+                <span>Restaurant Staff & Operations Team</span>
+            </h1>
+            <p class="text-stone-500 text-sm">Employee records, department roles, shift assignments, and waiter sales performance.</p>
+        </div>
+        <button onclick="openAddStaffModal()" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-sm shadow-sm transition flex items-center space-x-2 self-start sm:self-auto">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>Register Employee</span>
+        </button>
+    </div>
+
+    <!-- Staff Table -->
+    <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+            <span class="text-sm font-semibold text-stone-700">Total Staff: <span class="text-amber-600 font-bold">{{ staff|length }}</span></span>
+            <span class="text-xs text-stone-400">Relation: <code class="text-amber-600">orders.staff_id -> staff.staff_id (ON DELETE SET NULL)</code></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="bg-stone-50 text-xs font-semibold text-stone-500 uppercase border-b border-stone-200">
+                        <th class="py-3 px-4">Staff ID</th>
+                        <th class="py-3 px-4">Employee Name</th>
+                        <th class="py-3 px-4">Role</th>
+                        <th class="py-3 px-4">Contact</th>
+                        <th class="py-3 px-4 text-center">Shift</th>
+                        <th class="py-3 px-4 text-right">Monthly Salary</th>
+                        <th class="py-3 px-4 text-center">Orders Handled</th>
+                        <th class="py-3 px-4 text-right">Sales Volume</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    {% for s in staff %}
+                    <tr class="hover:bg-stone-50 transition">
+                        <td class="py-3.5 px-4 font-mono text-stone-400 text-xs">#{{ s.staff_id }}</td>
+                        <td class="py-3.5 px-4">
+                            <div class="font-semibold text-stone-900">{{ s.first_name }} {{ s.last_name }}</div>
+                            <div class="text-[11px] text-stone-400">Joined: {{ s.hire_date }}</div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="px-2.5 py-1 rounded text-xs font-semibold
+                                {% if s.role == 'Manager' %}bg-purple-100 text-purple-800
+                                {% elif 'Chef' in s.role %}bg-rose-100 text-rose-800
+                                {% elif s.role == 'Waiter' %}bg-amber-100 text-amber-800
+                                {% else %}bg-blue-100 text-blue-800{% endif %}">
+                                {{ s.role }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs">
+                            <div class="text-stone-800">{{ s.phone }}</div>
+                            <div class="text-stone-400">{{ s.email }}</div>
+                        </td>
+                        <td class="py-3.5 px-4 text-center font-mono text-xs">
+                            <span class="px-2 py-0.5 bg-stone-100 text-stone-700 rounded">{{ s.shift }}</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-right font-mono font-medium text-stone-700">
+                            ₹{{ "{:,.2f}".format(s.salary) }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center font-mono font-bold text-stone-800">
+                            {{ s.total_orders_handled }}
+                        </td>
+                        <td class="py-3.5 px-4 text-right font-mono font-bold text-amber-700">
+                            ₹{{ "{:,.2f}".format(s.total_sales) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Add Staff -->
+<div id="addStaffModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
+        <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+            <h3 class="text-lg font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-user-plus text-amber-600"></i>
+                <span>Register Staff Member (INSERT)</span>
+            </h3>
+            <button onclick="closeAddStaffModal()" class="text-stone-400 hover:text-stone-600">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form action="{{ url_for('add_staff') }}" method="POST" class="mt-4 space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">First Name *</label>
+                    <input type="text" name="first_name" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Last Name *</label>
+                    <input type="text" name="last_name" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Phone Number *</label>
+                    <input type="text" name="phone" required placeholder="+91-..." class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Email *</label>
+                    <input type="email" name="email" required placeholder="emp@bistro.com" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Role *</label>
+                    <select name="role" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="Waiter">Waiter</option>
+                        <option value="Head Chef">Head Chef</option>
+                        <option value="Sous Chef">Sous Chef</option>
+                        <option value="Cashier">Cashier</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Bartender">Bartender</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Shift</label>
+                    <select name="shift" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="Morning">Morning</option>
+                        <option value="Evening">Evening</option>
+                        <option value="Night">Night</option>
+                        <option value="Full Day">Full Day</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Salary (₹) *</label>
+                    <input type="number" name="salary" value="22000" min="5000" step="500" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono">
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 flex justify-end space-x-3">
+                <button type="button" onclick="closeAddStaffModal()" class="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow-sm">Save Employee</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddStaffModal() {
+    const modal = document.getElementById('addStaffModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeAddStaffModal() {
+    const modal = document.getElementById('addStaffModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+</script>
+{% endblock %}

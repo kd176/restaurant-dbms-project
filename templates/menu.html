@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Menu Catalog | Restaurant DBMS{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header & Action -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-burger text-amber-600"></i>
+                <span>Menu Catalog & Dishes Entity</span>
+            </h1>
+            <p class="text-stone-500 text-sm">Full CRUD operations on restaurant food and beverage items with category referential constraints.</p>
+        </div>
+        <button onclick="openAddDishModal()" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-sm shadow-sm transition flex items-center space-x-2 self-start sm:self-auto">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add New Dish</span>
+        </button>
+    </div>
+
+    <!-- Live SQL Query Viewer Card -->
+    <div class="bg-stone-900 text-stone-200 rounded-xl p-4 text-xs font-mono shadow-inner border border-stone-800">
+        <div class="flex items-center justify-between text-stone-400 mb-1.5 pb-1 border-b border-stone-800">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-code text-amber-400"></i>
+                <span class="font-semibold text-stone-300">Underlying SQL Query Executed:</span>
+            </div>
+            <span class="text-[10px] bg-stone-800 px-2 py-0.5 rounded text-amber-300 border border-stone-700">JOIN + LEFT JOIN + GROUP BY</span>
+        </div>
+        <pre class="overflow-x-auto text-emerald-400 whitespace-pre-wrap">{{ sql_used }}</pre>
+    </div>
+
+    <!-- Filters & Search Form -->
+    <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+        <form method="GET" action="{{ url_for('menu') }}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Search Dish</label>
+                <div class="relative">
+                    <input type="text" name="search" value="{{ search }}" placeholder="Dish name, category..." class="w-full pl-9 pr-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-stone-400 text-xs"></i>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Filter by Category</label>
+                <select name="category_id" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+                    <option value="">All Categories</option>
+                    {% for c in dropdowns.categories %}
+                        <option value="{{ c.category_id }}" {% if category_id == c.category_id|string %}selected{% endif %}>{{ c.category_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-stone-600 mb-1">Dietary Type</label>
+                <select name="food_type" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none">
+                    <option value="">All Types</option>
+                    <option value="Veg" {% if food_type == 'Veg' %}selected{% endif %}>Veg</option>
+                    <option value="Non-Veg" {% if food_type == 'Non-Veg' %}selected{% endif %}>Non-Veg</option>
+                    <option value="Vegan" {% if food_type == 'Vegan' %}selected{% endif %}>Vegan</option>
+                    <option value="Beverage" {% if food_type == 'Beverage' %}selected{% endif %}>Beverage</option>
+                </select>
+            </div>
+
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="flex-1 px-4 py-2 bg-stone-800 hover:bg-stone-900 text-white text-sm font-medium rounded-lg transition flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-filter text-xs"></i>
+                    <span>Apply Filter</span>
+                </button>
+                <a href="{{ url_for('menu') }}" class="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm rounded-lg transition" title="Clear Filters">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Dishes Data Table -->
+    <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+            <span class="text-sm font-semibold text-stone-700">Total Items: <span class="text-amber-600 font-bold">{{ menu_items|length }}</span></span>
+            <span class="text-xs text-stone-400">Foreign Key: <code class="text-amber-600">menu_items.category_id -> menu_categories.category_id</code></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="bg-stone-50 text-xs font-semibold text-stone-500 uppercase border-b border-stone-200">
+                        <th class="py-3 px-4">Item ID</th>
+                        <th class="py-3 px-4">Dish Name</th>
+                        <th class="py-3 px-4">Category</th>
+                        <th class="py-3 px-4 text-center">Type</th>
+                        <th class="py-3 px-4 text-right">Price</th>
+                        <th class="py-3 px-4 text-center">Prep Time</th>
+                        <th class="py-3 px-4 text-center">Total Sold</th>
+                        <th class="py-3 px-4 text-center">Availability</th>
+                        <th class="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    {% for item in menu_items %}
+                    <tr class="hover:bg-stone-50 transition">
+                        <td class="py-3.5 px-4 font-mono text-stone-400 text-xs">#{{ item.item_id }}</td>
+                        <td class="py-3.5 px-4">
+                            <div class="font-semibold text-stone-900 flex items-center space-x-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full {% if item.food_type == 'Veg' %}bg-emerald-500{% elif item.food_type == 'Non-Veg' %}bg-rose-500{% elif item.food_type == 'Vegan' %}bg-green-600{% else %}bg-sky-500{% endif %}"></span>
+                                <span>{{ item.item_name }}</span>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <span class="px-2.5 py-1 bg-stone-100 text-stone-700 rounded text-xs font-medium">{{ item.category_name }}</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-center font-mono text-xs">
+                            <span class="px-2 py-0.5 rounded font-semibold 
+                                {% if item.food_type == 'Veg' %}bg-emerald-50 text-emerald-700
+                                {% elif item.food_type == 'Non-Veg' %}bg-rose-50 text-rose-700
+                                {% elif item.food_type == 'Vegan' %}bg-green-50 text-green-700
+                                {% else %}bg-sky-50 text-sky-700{% endif %}">
+                                {{ item.food_type }}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 text-right font-mono font-bold text-stone-800">
+                            ₹{{ "{:,.2f}".format(item.price) }}
+                        </td>
+                        <td class="py-3.5 px-4 text-center text-xs text-stone-500 font-mono">
+                            {{ item.prep_time_minutes }} mins
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <span class="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-xs font-semibold font-mono">{{ item.total_sold }} units</span>
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            {% if item.is_available %}
+                                <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-semibold">Available</span>
+                            {% else %}
+                                <span class="px-2 py-0.5 bg-stone-200 text-stone-600 rounded-full text-xs font-semibold">Out of Stock</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                            <button onclick='openEditDishModal({{ item|tojson|safe }})' class="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition" title="Edit Dish">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <form action="{{ url_for('delete_menu_item', item_id=item.item_id) }}" method="POST" class="inline" onsubmit="return confirm('Delete dish {{ item.item_name }}?\n\nNote: If this dish has existing order references, ON DELETE RESTRICT will prevent deletion.');">
+                                <button type="submit" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded transition" title="Delete Dish">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- Modal: Add New Dish -->
+<div id="addDishModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
+        <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+            <h3 class="text-lg font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-plus-circle text-amber-600"></i>
+                <span>Add New Menu Dish (INSERT)</span>
+            </h3>
+            <button onclick="closeAddDishModal()" class="text-stone-400 hover:text-stone-600">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form action="{{ url_for('add_menu_item') }}" method="POST" class="mt-4 space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-stone-700 mb-1">Dish Name *</label>
+                <input type="text" name="item_name" required placeholder="e.g. Malai Kofta Curry" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Menu Category *</label>
+                    <select name="category_id" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        {% for c in dropdowns.categories %}
+                            <option value="{{ c.category_id }}">{{ c.category_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Price (₹) *</label>
+                    <input type="number" step="1" name="price" required placeholder="e.g. 350" min="1" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Dietary Type</label>
+                    <select name="food_type" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="Veg">Veg</option>
+                        <option value="Non-Veg">Non-Veg</option>
+                        <option value="Vegan">Vegan</option>
+                        <option value="Beverage">Beverage</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Prep Time (mins)</label>
+                    <input type="number" name="prep_time_minutes" value="15" min="1" max="120" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Status</label>
+                    <select name="is_available" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="1">Available</option>
+                        <option value="0">Out of Stock</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 flex justify-end space-x-3">
+                <button type="button" onclick="closeAddDishModal()" class="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow-sm">Save Dish</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Edit Dish -->
+<div id="editDishModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200">
+        <div class="flex items-center justify-between pb-4 border-b border-stone-100">
+            <h3 class="text-lg font-bold text-stone-800 flex items-center space-x-2">
+                <i class="fa-solid fa-pen-to-square text-blue-600"></i>
+                <span>Edit Menu Dish (UPDATE)</span>
+            </h3>
+            <button onclick="closeEditDishModal()" class="text-stone-400 hover:text-stone-600">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <form id="editDishForm" method="POST" class="mt-4 space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-stone-700 mb-1">Dish Name</label>
+                <input type="text" name="item_name" id="edit_dish_name" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Category</label>
+                    <select name="category_id" id="edit_dish_category" required class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        {% for c in dropdowns.categories %}
+                            <option value="{{ c.category_id }}">{{ c.category_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Price (₹)</label>
+                    <input type="number" step="1" name="price" id="edit_dish_price" required min="1" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 font-mono">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Dietary Type</label>
+                    <select name="food_type" id="edit_dish_food_type" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="Veg">Veg</option>
+                        <option value="Non-Veg">Non-Veg</option>
+                        <option value="Vegan">Vegan</option>
+                        <option value="Beverage">Beverage</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Prep Time (mins)</label>
+                    <input type="number" name="prep_time_minutes" id="edit_dish_prep_time" min="1" max="120" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-stone-700 mb-1">Availability</label>
+                    <select name="is_available" id="edit_dish_is_available" class="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+                        <option value="1">Available</option>
+                        <option value="0">Out of Stock</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 flex justify-end space-x-3">
+                <button type="button" onclick="closeEditDishModal()" class="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg">Cancel</button>
+                <button type="submit" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow-sm">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddDishModal() {
+    const modal = document.getElementById('addDishModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeAddDishModal() {
+    const modal = document.getElementById('addDishModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function openEditDishModal(item) {
+    document.getElementById('editDishForm').action = '/menu/edit/' + item.item_id;
+    document.getElementById('edit_dish_name').value = item.item_name;
+    document.getElementById('edit_dish_category').value = item.category_id;
+    document.getElementById('edit_dish_price').value = item.price;
+    document.getElementById('edit_dish_food_type').value = item.food_type;
+    document.getElementById('edit_dish_prep_time').value = item.prep_time_minutes;
+    document.getElementById('edit_dish_is_available').value = item.is_available;
+
+    const modal = document.getElementById('editDishModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeEditDishModal() {
+    const modal = document.getElementById('editDishModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+</script>
+{% endblock %}
